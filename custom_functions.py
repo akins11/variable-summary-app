@@ -1,7 +1,9 @@
 from pandas import DataFrame, Series, DatetimeIndex, concat
 from plotly.express import histogram, box, violin, bar, line, scatter, scatter_3d, pie
+from plotly.graph_objects import Heatmap, Layout, Figure
+from plotly.figure_factory import create_annotated_heatmap
 from string import punctuation, ascii_letters
-from numpy import nan, array, where, append
+from numpy import nan, array, where, append, around
 from dash import html
 from collections import Counter
 import warnings
@@ -12,7 +14,41 @@ import warnings
 # Global settings ======================================================================================================
 group_color = ["#3CB371", "#CD6600", "#0000FF", "#CD1076", "#6B4226", "#BA55D3", "#CD3700", "#007FFF", "#CDB38B", "#00C5CD", "#4F2F4F"]
 
+dash_pal = {
+    "eerie black":  "#212529",
+    "onyx":         "#343A40",
+    "davys grey":   "#495057",
+    "sonic silver": "#6C757D",
+    "cadet crayola": "#ADB5BD",
+    "light gray":   "#CED4DA",
+    "gainsboro":    "#DEE2E6",
+    "cultured":     "#E9ECEF",
+    "cultured2":    "#F8F9FA"
+}
+plt_color = {
+    "bg": "#E9ECEF",
+    "bar": "#495057",
+    "point": "#343A40",
+    "grid_line": "#DEE2E6"
+}
+
+heatmap_color_scale = [
+    'rgb(204, 204, 204)',
+    'rgb(184, 184, 184)',
+    'rgb(171, 171, 171)',
+    'rgb(153, 153, 153)',
+    'rgb(136, 136, 136)',
+    'rgb(112, 112, 112)',
+    'rgb(85, 85, 85)',
+    'rgb(66, 66, 66)',
+    'rgb(41, 41, 41)',
+    'rgb(8, 8, 8)'
+]
+card_color = "#E9ECEF"
+
 plot_height = 600
+
+
 
 
 
@@ -70,8 +106,8 @@ def to_number(df, variable, num_type):
     parameter
     ---------
     df [pd.DataFrame]
-    variable [string] A variable with numeric data type.
-    num_type [string] The type of numeric data type to set the variable to.
+    variable [string] A variable which can be converted to a numeric data type.
+    num_type [string] The type of numeric data type to convert the variable to.
 
     return
     ------
@@ -80,8 +116,8 @@ def to_number(df, variable, num_type):
     try:
         if num_type == "int64":
             if any(df[variable].apply(lambda x: "." in x)):
-                warnings.warn("can not convert floats data type to Integer")
-                return df[variable]
+                # warnings.warn("can not convert floats data type to Integer")
+                return df[variable].astype("float64").astype("int64")
 
         return df[variable].astype(num_type)
 
@@ -92,13 +128,41 @@ def to_number(df, variable, num_type):
         for pc in pun_chr:
             df[variable] = df[variable].str.replace(pc, "", regex = False)
 
-        return df[variable].astype(num_type)
+        return df[variable].astype(num_type) if num_type == "float" else df[variable].astype("float64").astype("int64")
 
+
+def get_empty_object(df, variables):
+    """
+    :param df: dataframe
+    :param variables: variable from the dataframe
+    :return: a dictionary with a boolean type if variable(s) have missing values and the variable(s) name(s)
+    """
+    if isinstance(variables, list):
+        f_df = df[variables]
+
+        mis_list = []
+        for var in f_df.columns:
+            bool_vals = f_df[var] == ' '
+            mis_list.append(bool_vals.sum())
+
+        if any([var > 0 for var in mis_list]):
+            mis_vars = [ind for ind, val in enumerate(mis_list) if val]
+            mis_vars = f_df.iloc[:, mis_vars].columns.to_list()
+            return {"bool": True, "variables": mis_vars}
+        else:
+            return {"bool": False}
+    else:
+        bool_vals = df[variables] == ' '
+        if bool_vals.sum() > 0:
+            return {"bool": True, "variables": variables}
+        else:
+            return {"bool": False}
 
 def remove_missing_values_gb(df, variables):
     f_tbl = df.copy()
 
     if isinstance(variables, list):
+        # Get columns with missing values less than the number of rows in the data.
         valid_variables = []
         for var in variables:
             if f_tbl[var].isnull().sum() < f_tbl.shape[0]:
@@ -108,24 +172,34 @@ def remove_missing_values_gb(df, variables):
             if any(f_tbl[valid_variables].isnull().sum().values > 0):
                 f_tbl = f_tbl.dropna(axis="index", how="any", subset=valid_variables)
 
-                if f_tbl.shape[0] == 0:
-                    raise IndexError("The output returned an empty table after removing `Nan` values.")
+            if f_tbl.shape[0] != 0:
+                empty_vals = get_empty_object(f_tbl, valid_variables)
 
-                return f_tbl
+                if empty_vals["bool"]:
+                    for var in empty_vals["variables"]:
+                        f_tbl = f_tbl[f_tbl[var] != ' ']
+
+            if f_tbl.shape[0] == 0:
+                raise IndexError("The output returned an empty table after removing `Nan` values.")
             else:
                 return f_tbl
         else:
             return None
 
     else:
+        # Get columns with missing values less than the number of rows in the data.
         if f_tbl[variables].isnull().sum() < f_tbl.shape[0]:
             if f_tbl[variables].isnull().sum() > 0:
                 f_tbl = f_tbl.loc[f_tbl[variables].notna()]
 
-                if f_tbl.shape[0] == 0:
-                    raise IndexError("The output returned an empty table after removing `Nan` values.")
+            if f_tbl.shape[0] != 0:
+                empty_val = get_empty_object(f_tbl, variables)
 
-                return f_tbl
+                if empty_val["bool"]:
+                    f_tbl = f_tbl.loc[f_tbl[variables] != ' ']
+
+            if f_tbl.shape[0] == 0:
+                raise IndexError("The output returned an empty table after removing `Nan` values.")
             else:
                 return f_tbl
         else:
@@ -179,6 +253,65 @@ def change_dtype(df, variables, to_type):
         return df
 
 
+def is_missing_values(df, variables, missing_what):
+    """
+    :param df: dataframe
+    :param variables: variable(s) from the dataframe
+    :param missing_what: either 'all' or 'some'
+    :return: a dictionary with a boolean type if variable(s) have missing values and the variable(s) name(s).
+    """
+    n_rows = df.shape[0]
+
+    if missing_what == "all":
+        if isinstance(variables, list):
+            is_missing_all = []
+            for var in variables:
+                if df[var].isnull().sum() == n_rows:
+                    is_missing_all.append(var)
+            if is_missing_all != []:
+                return {"bool": True, "variables": is_missing_all}
+            else:
+                return {"bool": False}
+        else:
+            bol = df[variables].isnull().sum() == n_rows
+            if bol:
+                return {"bool": True, "variables": variables}
+            else:
+                return {"bool": False}
+    elif missing_what == "some":
+        if isinstance(variables, list):
+            is_missing_some = []
+            for var in variables:
+                n_missing = df[var].isnull().sum()
+                if n_missing > 0 and n_missing < n_rows:
+                    is_missing_some.append(var)
+            if is_missing_some != []:
+                return {"bool": True, "variables": is_missing_some}
+            else:
+                return {"bool": False}
+        else:
+            n_missing = df[variables].isnull().sum()
+            if n_missing > 0 and n_missing < n_rows:
+                return {"bool": True, "variables": variables}
+            else:
+                return {"bool": False}
+
+
+def check_for(what, df, variables):
+    """
+    :param what: the condition to check. any of empty_values, missing_all_values, missing_some_values
+    :param df: dataframe.
+    :param variables: variable(s) from the dataframe.
+    :return: a dictionary with a boolean type if variable(s) have missing values and the variable(s) name(s).
+    """
+    if what == "empty_values":
+        return get_empty_object(df, variables)
+    elif what == "missing_all_values":
+        return is_missing_values(df, variables, "all")
+    elif  what == "missing_some_values":
+        return is_missing_values(df, variables, "some")
+
+
 def drop_missing_values(df, how, percentage = None):
     """
     parameter
@@ -207,7 +340,7 @@ def drop_missing_values(df, how, percentage = None):
         f_tbl = df.dropna(axis = "index", how = "all")
         
     elif how == "percent_missing":
-        # drop columns that do not meet a particular amount of non missing values.
+        # drop columns that do not meet a threshold of non missing values.
         if percentage is not None:
             user_percent = percentage/100
             f_tbl = df.dropna(axis = "columns", how = "all", thresh = round(user_percent * df.shape[0]))
@@ -234,7 +367,7 @@ def get_missing_values(df):
     f_tbl = f_tbl.sort_values(by = "count", ascending = False)
     f_tbl = f_tbl.loc[f_tbl["count"] > 0]
     
-    if f_tbl.shape[0] > 1:
+    if f_tbl.shape[0] > 0:
         return f_tbl
     else:
         return DataFrame({"variable": "No Missing Value"}, index = [0])
@@ -402,8 +535,6 @@ def clean_data(df, variables = None, to_type = None, how = None, percentage = No
             f_tbl = extract_datetime(df = f_tbl, date_col = date_var, which = which)
         else:
             f_tbl
-    else:
-        f_tbl
         
     return f_tbl
         
@@ -719,8 +850,8 @@ def num_stat_summary(df, variable):
     def get_stat_summary(x, var):
         f_tbl = x[[var]].describe().T
         f_tbl = f_tbl.iloc[:, 1:]
-        f_tbl.columns = ["Mean", "Std", "Minimum", "Q_25", "Median", "Q_75", "maximum"]
-        f_tbl = f_tbl[["Minimum",  "Q_25", "Mean", "Std", "Median", "Q_75", "maximum"]]
+        f_tbl.columns = ["Mean", "Std", "Minimum", "Quantile 25", "Median", "Quantile 75", "maximum"]
+        f_tbl = f_tbl[["Minimum",  "Quantile 25", "Mean", "Std", "Median", "Quantile 75", "maximum"]]
         f_tbl = round(f_tbl, 3)
         return f_tbl
     
@@ -737,7 +868,7 @@ def num_stat_summary(df, variable):
         return get_stat_summary(x = df, var = variable)
 
              
-# plot [issue weak upper does not seem to be filtered]
+# plot [issue: weak upper does not seem to be filtered]
 def single_num_distribution_out(df, variable, dis_type = "hist", drop_outlier = None, p_color = None, n_bin = None, output_type = "plot"):
     """
     parameter
@@ -765,7 +896,7 @@ def single_num_distribution_out(df, variable, dis_type = "hist", drop_outlier = 
 
         var_name = str.replace(variable, "_", " ").title()
         p_template = "plotly_white"
-        fp_color = ["#8A8A8A"] if p_color is None else p_color
+        fp_color = [plt_color["bar"]] if p_color is None else p_color
         p_title = f"Distribution Of {var_name}"
         p_labels = {variable: var_name}
 
@@ -803,7 +934,9 @@ def single_num_distribution_out(df, variable, dis_type = "hist", drop_outlier = 
                 template = p_template,
                 height = plot_height
             )
-
+        f_fig = f_fig.update_xaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_yaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_layout(paper_bgcolor = plt_color["bg"], plot_bgcolor = plt_color["bg"])
         return f_fig.update_traces(hoverlabel = {"font_color": "white"})
 
     elif output_type == "table":
@@ -834,7 +967,7 @@ def num_relationship_out(df, variables, drop_outlier = None, p_color = None, plo
         f_tbl = df
 
     if output_type == "plot":
-        p_color = ["#9400D3"] if p_color is None else p_color
+        p_color = [plt_color["point"]] if p_color is None else p_color
         p_template = "plotly_white"
         clean_lab = [clean_plot_label(var) for var in variables]
 
@@ -882,6 +1015,9 @@ def num_relationship_out(df, variables, drop_outlier = None, p_color = None, plo
                     template = p_template,
                     height = plot_height
                 )
+        f_fig = f_fig.update_xaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_yaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_layout(paper_bgcolor = plt_color["bg"], plot_bgcolor = plt_color["bg"])
 
         return f_fig.update_traces(hoverlabel = {"font_color": "white"})
 
@@ -919,7 +1055,7 @@ def char_count(df, variables, sort = None):
     return f_tbl
 
 
-def one_char_out(df, variable, p_type = "bar", p_color = None, output_type = "plot"):  # Changed
+def one_char_out(df, variable, p_type = "bar", p_color = None, num_unique_obs = 15, output_type = "plot"):
     """
     parameter
     ---------
@@ -942,17 +1078,33 @@ def one_char_out(df, variable, p_type = "bar", p_color = None, output_type = "pl
         var_lab = clean_plot_label(label = variable)
 
         if p_type == "bar":
-            f_fig = bar(data_frame = f_tbl,
-                        x = variable,
-                        y = "count",
-                        hover_name = variable,
-                        hover_data = {variable: False, "proportion": True},
-                        color_discrete_sequence = ["#551A8B"] if p_color is None else p_color,
-                        labels = {variable: var_lab, "count": "Count"},
-                        title = f"Number Of Unique {var_lab} Values.",
-                        template = "plotly_white",
-                        height = plot_height
-                        )
+            if f_tbl[variable].nunique() <= 6:
+                f_fig = bar(data_frame = f_tbl,
+                            x = variable,
+                            y = "count",
+                            hover_name = variable,
+                            hover_data = {variable: False, "proportion": True},
+                            color_discrete_sequence = [plt_color["bar"]] if p_color is None else p_color,
+                            labels = {variable: var_lab, "count": "Count"},
+                            title = f"Number Of Unique {var_lab} Values.",
+                            template = "plotly_white",
+                            height = plot_height
+                            )
+            else:
+                f_tbl = f_tbl.head(num_unique_obs)
+                f_tbl = f_tbl.sort_values(by="count")
+
+                f_fig = bar(data_frame = f_tbl,
+                            y = variable,
+                            x = "count",
+                            hover_name = variable,
+                            hover_data = {variable: False, "proportion": True},
+                            color_discrete_sequence = [plt_color["bar"]] if p_color is None else p_color,
+                            labels = {"count": "Count", variable: var_lab},
+                            title = f"Top {num_unique_obs} Unique {var_lab} Values.",
+                            template = "plotly_white",
+                            height = plot_height
+                            )
         elif p_type == "pie":
             if f_tbl[variable].nunique() <= 5:
                 f_fig = pie(data_frame = f_tbl,
@@ -967,13 +1119,18 @@ def one_char_out(df, variable, p_type = "bar", p_color = None, output_type = "pl
                 f_fig.update_layout(legend = dict(xanchor="center", yanchor = "top", y = 1.1, x = 0.50, orientation = "h"))
             else:
                 raise Exception("pie chart will only work for variables with less than 6 unique values")
+
+        f_fig = f_fig.update_xaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_yaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_layout(paper_bgcolor=plt_color["bg"], plot_bgcolor=plt_color["bg"])
+
         return f_fig.update_traces(hoverlabel = {"font_color": "white"})
 
     elif output_type == "table":
         return f_tbl
 
 
-def multi_char_out(df, variables, p_color = None, output_type = "plot"):
+def multi_char_out(df, variables, p_color = None, num_unique_obs = 15, output_type = "plot"):
     """
     parameters
     ----------
@@ -995,6 +1152,12 @@ def multi_char_out(df, variables, p_color = None, output_type = "plot"):
         plot_label = [clean_plot_label(char_var) for char_var in s_variables]
         add_to_title = plot_label[1] if len(plot_label) == 2 else " & ".join(plot_label[1:])
 
+        p_title = f"Number Of Unique {plot_label[0]} Values By {add_to_title}"
+
+        if df[s_variables[0]].nunique() > 8:
+            f_tbl = f_tbl.head(num_unique_obs)
+            p_title = f"Top {num_unique_obs} Unique {plot_label[0]} Values By {add_to_title}"
+
         def plotly_bar(p_x, p_y, p_facet_col, p_facet_col_spacing = None, pf_color = None):
             f_plt = bar(
                 data_frame = f_tbl,
@@ -1004,7 +1167,7 @@ def multi_char_out(df, variables, p_color = None, output_type = "plot"):
                 facet_col_spacing = p_facet_col_spacing,
                 color_discrete_sequence = p_color,
                 color = pf_color,
-                title = f"Number Of Unique {plot_label[0]} Values By {add_to_title}",
+                title = p_title,
                 labels= {s_variables[2]: plot_label[2]} if pf_color is not None else None,
                 template = "plotly_white",
                 height = plot_height
@@ -1035,6 +1198,10 @@ def multi_char_out(df, variables, p_color = None, output_type = "plot"):
                                    p_facet_col = s_variables[2],
                                    pf_color = s_variables[1])
             f_fig.update_xaxes(matches = None, showticklabels = True)
+
+        f_fig = f_fig.update_xaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_yaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_layout(paper_bgcolor=plt_color["bg"], plot_bgcolor=plt_color["bg"])
 
         return f_fig.update_traces(hoverlabel = {"font_color": "white"})
 
@@ -1072,7 +1239,8 @@ def char_num_summary(df, chr_var1, num_var1, chr_var2 = None, num_var2 = None):
     return f_tbl
 
 
-def single_char_num_out(df, chr_var, num_var, agg_fun = "mean", drop_outlier = None, p_color=None, output_type="plot"):
+def single_char_num_out(df, chr_var, num_var, agg_fun = "mean", drop_outlier = None, p_color=None, keep_num_unique_chr = 10,
+                        output_type="plot"):
     """
     parameter
     ---------
@@ -1098,11 +1266,19 @@ def single_char_num_out(df, chr_var, num_var, agg_fun = "mean", drop_outlier = N
     if output_type == "plot":
         match_arg(agg_fun, ["min", "mean", "median", "max", "sum"])
 
-        f_tbl = char_lump(df = f_tbl, variable = chr_var, others = "Others")
-        f_tbl = f_tbl.sort_values(by = agg_fun, ascending = False)
-
         plot_labels = [clean_plot_label(var) for var in [chr_var, num_var]]
         agg_labels = {"min": "Minimum", "mean": "Average", "median": "Median", "max": "Maximum", "sum": "Total"}
+
+        p_title = f"{agg_labels[agg_fun]} {plot_labels[1]} By {plot_labels[0]}"
+
+        # f_tbl = char_lump(df = f_tbl, variable = chr_var, keep_n = keep_num_unique_chr, others = "Others")
+        f_tbl = f_tbl.sort_values(by = agg_fun, ascending = False)
+
+        if f_tbl[chr_var].nunique() > 8:
+            f_tbl = f_tbl.head(keep_num_unique_chr)
+            f_tbl = f_tbl.sort_values(by=agg_fun, ascending=True)
+
+            p_title = f"Top {keep_num_unique_chr} {agg_labels[agg_fun]} {plot_labels[1]} By {plot_labels[0]}"
 
         p_color = ["#9400D3"] if p_color is None else p_color
 
@@ -1113,7 +1289,7 @@ def single_char_num_out(df, chr_var, num_var, agg_fun = "mean", drop_outlier = N
                 y = p_y,
                 color_discrete_sequence = p_color,
                 labels = {chr_var: plot_labels[0], agg_fun: agg_labels[agg_fun]},
-                title = f"{agg_labels[agg_fun]} {plot_labels[1]} By {plot_labels[0]}",
+                title = p_title,
                 template = "plotly_white",
                 height = plot_height
             )
@@ -1125,6 +1301,10 @@ def single_char_num_out(df, chr_var, num_var, agg_fun = "mean", drop_outlier = N
         else:
             f_fig = plotly_bar(p_x = agg_fun,
                                p_y = chr_var)
+
+        f_fig = f_fig.update_xaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_yaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_layout(paper_bgcolor=plt_color["bg"], plot_bgcolor=plt_color["bg"])
 
         return f_fig.update_traces(hoverlabel = {"font_color": "white"})
 
@@ -1174,7 +1354,10 @@ def one_chr_two_num_out(df, chr_var, num_var1, num_var2, p_color = group_color, 
             height = plot_height
         )
 
-        return f_fig #.show()
+        f_fig = f_fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor=plt_color["grid_line"])
+        f_fig = f_fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor=plt_color["grid_line"])
+
+        return f_fig.update_layout(paper_bgcolor=plt_color["bg"], plot_bgcolor=plt_color["bg"])
 
     elif output_type == "table":
         return char_num_summary(df = f_tbl, chr_var1 = chr_var, num_var1 = num_var1, num_var2 = num_var2)
@@ -1250,6 +1433,10 @@ def one_num_two_chr_out(df, num_var, chr_var1, chr_var2, agg_fun = "mean", drop_
                                p_y = s_chars[0])
             f_fig.update_xaxes(matches = None, showticklabels = True)
 
+        f_fig = f_fig.update_xaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_yaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_layout(paper_bgcolor=plt_color["bg"], plot_bgcolor=plt_color["bg"])
+
         return f_fig.update_traces(hoverlabel = {"font_color": "white"})
 
     elif output_type == "table":
@@ -1257,7 +1444,7 @@ def one_num_two_chr_out(df, num_var, chr_var1, chr_var2, agg_fun = "mean", drop_
 
 
 
-def one_date_summary_out(df, date_var, n_bin = None, p_color = None, output_type = "plot"):  # New
+def one_date_summary_out(df, date_var, n_bin = None, p_color = None, output_type = "plot"):
     """
     parameters
     ----------
@@ -1281,6 +1468,11 @@ def one_date_summary_out(df, date_var, n_bin = None, p_color = None, output_type
                           template = "plotly_white",
                           height = plot_height
                           )
+
+        f_fig = f_fig.update_xaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_yaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_layout(paper_bgcolor=plt_color["bg"], plot_bgcolor=plt_color["bg"])
+
         return f_fig.update_traces(hoverlabel = {"font_color": "white"})
 
     elif output_type == "table":
@@ -1367,6 +1559,9 @@ def date_summary_out(df, date_var, num_var, chr_var = None, agg_fun = "mean", dr
                 height = plot_height
             )
         #         f_fig.update_xaxes(type = "category")
+        f_fig = f_fig.update_xaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_yaxes(showgrid = True, gridwidth = 1, gridcolor = plt_color["grid_line"])
+        f_fig = f_fig.update_layout(paper_bgcolor=plt_color["bg"], plot_bgcolor=plt_color["bg"])
 
         return f_fig.update_traces(hoverlabel = {"font_color": "white"})
 
@@ -1440,7 +1635,7 @@ def get_vars_dtypes(df, variables):
 
 def wrapper_summary(w_df,
                     first_variable = None, second_variable = None, third_variable = None,
-                    plt_type = None, num_agg_type = "mean", outlier_type = None, output_type = None):
+                    plt_type = None, num_agg_type = "mean", outlier_type = None, n_char_unique_value = 10, output_type = None):
     """
     parameters
     ----------
@@ -1470,7 +1665,7 @@ def wrapper_summary(w_df,
 
     vars_dt = get_vars_dtypes(df = w_df, variables = avaliable_var)
 
-    single_bar_color = ["#8A8A8A"]
+    single_bar_color = [plt_color["bar"]]
     group_color = ["#3CB371", "#CD6600", "#0000FF", "#CD1076", "#6B4226", "#BA55D3", "#CD3700", "#007FFF", "#CDB38B", "#00C5CD", "#4F2F4F"]
 
     if not isinstance(avaliable_var, list):
@@ -1483,7 +1678,7 @@ def wrapper_summary(w_df,
             plt_type = "bar" if plt_type is None else plt_type
             char_pie_colors = single_bar_color if plt_type == "bar" else group_color
             output = one_char_out(df = w_df, variable = avaliable_var, p_type = plt_type, p_color = char_pie_colors,
-                                  output_type = output_type)
+                                  num_unique_obs = n_char_unique_value, output_type = output_type)
 
         elif vars_dt[avaliable_var] == "datetime":
             output = one_date_summary_out(df = w_df, date_var = avaliable_var, n_bin = None, p_color = single_bar_color,
@@ -1495,11 +1690,12 @@ def wrapper_summary(w_df,
     else:
         if len(avaliable_var) == 2:
             if is_all_dtype(dtype = "numeric", dt_dict = vars_dt):  # -----------| All Numeric variables
-                output = num_relationship_out(df = w_df, variables = avaliable_var, drop_outlier = outlier_type, p_color = single_bar_color,
+                output = num_relationship_out(df = w_df, variables = avaliable_var, drop_outlier = outlier_type, p_color = [plt_color["point"]],
                                               output_type = output_type)
 
             elif is_all_dtype(dtype = "character", dt_dict = vars_dt):  # -----------| ALl Character variables
-                output = multi_char_out(df = w_df, variables = avaliable_var, p_color = single_bar_color, output_type = output_type)
+                output = multi_char_out(df = w_df, variables = avaliable_var, p_color = single_bar_color,
+                                        num_unique_obs = n_char_unique_value, output_type = output_type)
 
             elif is_all_dtype(dtype = "datetime", dt_dict = vars_dt):  # ----------| All datetime
                 output = empty_out(output_type = output_type)
@@ -1509,7 +1705,7 @@ def wrapper_summary(w_df,
                                              chr_var = dtype_variable(dt_dict = vars_dt, data_type = "character"),
                                              num_var = dtype_variable(dt_dict = vars_dt, data_type = "numeric"),
                                              agg_fun = num_agg_type, drop_outlier = outlier_type, p_color = single_bar_color,
-                                             output_type = output_type)
+                                             keep_num_unique_chr = n_char_unique_value, output_type = output_type)
 
             elif is_all_dtype(dtype = ["numeric", "datetime"], dt_dict = vars_dt):  # ---------| A numeric and Datetime variable
                 output = date_summary_out(df = w_df,
@@ -1530,7 +1726,8 @@ def wrapper_summary(w_df,
                                               plot_type = plt_type, output_type = output_type)
 
             elif is_all_dtype(dtype = "character", dt_dict = vars_dt):  # --------| All character
-                output = multi_char_out(df = w_df, variables = avaliable_var, p_color = group_color, output_type = output_type)
+                output = multi_char_out(df = w_df, variables = avaliable_var, p_color = group_color,
+                                        num_unique_obs = n_char_unique_value, output_type = output_type)
 
             elif is_all_dtype(dtype = ["numeric", "character", "character"], dt_dict = vars_dt):  # --------| A numeric and two character variable
                 chr_vars = dtype_variable(dt_dict = vars_dt, data_type = "character")
@@ -1695,3 +1892,77 @@ def table_structure(df):
             | datetime | {number_datetime_vars} |
             """
 
+
+
+def get_matrix_var(df):
+    return df.select_dtypes(["int64", "float64"]).columns.to_list()
+
+
+def corr_matrix(df, variables = None, plt_bg_color="#E9ECEF"):
+    """
+    :param df: a dataframe with numerical data types
+    :param variables: a list of numerical variables from the data.
+    :param plt_bg_color: plot background color.
+    :return: plotly object
+    """
+    f_df = df.select_dtypes(["int64", "float64"])
+
+    if variables is not None:
+        if len(variables) >= 2:
+            f_df = f_df[variables]
+        else:
+            f_df
+
+    corr_mtx = f_df.corr()
+
+    if corr_mtx.shape != (0, 0):
+        if corr_mtx.shape[1] <= 8:
+            z = array(corr_mtx)
+
+            f_fig = create_annotated_heatmap(
+                z=z,
+                x=list(corr_mtx.columns),
+                y=list(corr_mtx.index),
+                annotation_text= around(z, decimals=2),
+                hoverinfo=["x", "y"],
+                hovertemplate="%{x}<br>%{y}<extra></extra>",
+                colorscale=heatmap_color_scale,
+                showscale=True,
+                font_colors=["white"],
+                ygap=1, xgap=1,
+                zmin=-1, zmid=0, zmax=1,
+            )
+            f_fig.update_xaxes(side="bottom")
+            f_fig.update_layout(paper_bgcolor=plt_bg_color, plot_bgcolor=plt_bg_color,
+                                title_text="Correlation Matrix",
+                                title_x=0.1,
+                                xaxis_showgrid=False, yaxis_showgrid=False,
+                                template="plotly_white")
+
+            for i in range(len(f_fig.layout.annotations)):
+                if f_fig.layout.annotations[i].text == "nan":
+                    f_fig.layout.annotations[i].text = ""
+
+            return f_fig
+
+        elif corr_mtx.shape[1] > 8:
+            heatmap = Heatmap(
+                x=corr_mtx.columns,
+                y=corr_mtx.index,
+                z= array(corr_mtx),
+                zmin=-1, zmid=0, zmax=1,
+                xgap=1, ygap=1,
+                hovertemplate="%{x}<br>%{y}<br>%{z:.3f}<extra></extra>",
+                colorscale=heatmap_color_scale
+            )
+
+            layout = Layout(
+                title_text="Correlation Matrix",
+                title_x=0.1,
+                xaxis_showgrid=False, yaxis_showgrid=False,
+                paper_bgcolor=plt_bg_color, plot_bgcolor=plt_bg_color,
+                template="plotly_white"
+            )
+
+            f_fig = Figure(data=[heatmap], layout=layout)
+            return f_fig
