@@ -9,13 +9,13 @@ import base64
 import io
 
 import custom_functions as cf
-from pandas.api.types import is_numeric_dtype
+import component_functions as comp_fun
 
 
 # Read Demo data.
 demo_df = pd.read_csv("m_sales.csv")
 
-app = dash.Dash(__name__, external_stylesheets = [dbc.themes.LUX])
+app = dash.Dash(__name__, external_stylesheets = [dbc.themes.LUX], suppress_callback_exceptions=True)
 server = app.server
 
 # Tabs =================================================================================================================
@@ -27,73 +27,87 @@ tab_data_choice = dbc.Tab(
     active_tab_class_name = "tab-selected",
     label_class_name = "tab-label-style",
     children = [
-        dbc.Row(
-            class_name = "g-6 tab-top-row",
-            children = [
-                dbc.Col(
-                    html.Div(
-                        [
-                            dcc.Upload(
-                            id = "upload_data",
-                            children = [
-                                dbc.Button(
-                                    children = html.Div(["Drag and Drop or Select file"]),
-                                    color = "primary",
-                                    outline = True,
-                                    class_name = "me-1"
-                                )
-                            ],
-                            className = "d-grid gap-2",
-                            multiple = True
-                            )
-                        ],
-                    ),
-                    width = 4,
-                    align = "center"
+        html.Div(
+            [
+                dbc.Row(
+                    class_name="g-6 tab-top-row",
+                    children=[
+                        dbc.Col(
+                            html.Div(
+                                [
+                                    dcc.Upload(
+                                        id="upload_data",
+                                        children=[
+                                            dbc.Button(
+                                                children=html.Div(["Drag and Drop or Select file"]),
+                                                color="primary",
+                                                outline=True,
+                                                class_name="me-1"
+                                            )
+                                        ],
+                                        className="d-grid gap-2",
+                                        multiple=True
+                                    )
+                                ],
+                            ),
+                            width=4,
+                            align="center"
+                        ),
+
+                        dbc.Col(
+                            html.Div(
+                                [
+                                    dbc.Button(
+                                        children=html.Div(["Use Demo Data"]),
+                                        id="use_demo_data",
+                                        color="primary",
+                                        outline=True,
+                                        class_name="me-1"
+                                    )
+                                ],
+                                className="d-grid gap-2",
+                            ),
+                            width=4,
+                            align="center",
+                        )
+                    ],
+                    justify="center",
                 ),
 
-                dbc.Col(
-                    html.Div(
+                html.Br(),
+
+                dbc.Row(
+                    children=dbc.Col(
                         [
-                            dbc.Button(
-                                children = html.Div(["Use Demo Data"]),
-                                id = "use_demo_data",
-                                color = "primary",
-                                outline = True,
-                                class_name = "me-1"
+                            html.Div(
+                                dcc.Store(id="store_data"),
+                            ),
+
+                            html.Div(
+                                [
+                                    html.Label("Data Preview", className= "label-header"),
+                                    html.Hr(),
+
+                                    dcc.Loading(
+                                        id="display_data_spinner",
+                                        color="black",
+                                        children=[
+                                            dbc.CardBody(id="display_data")
+                                        ]
+                                    )
+                                ],
+                                className= "div-card"
                             )
                         ],
-                        className = "d-grid gap-2",
                     ),
-                    width = 4,
-                    align = "center",
-                )
-            ],
-            justify = "center",
+                    class_name = "home-panel-box"
+                ),
+            ]
         ),
 
         html.Br(),
-
-        dbc.Row(
-            class_name = "g-6 tab-row",
-            children = html.Div(
-                [
-                    dcc.Store(id = "store_data"),
-                    dbc.Card(
-                        [
-                            dbc.CardHeader("Data Preview", class_name = "card-title"),
-                            dcc.Loading(
-                                id = "display_data_spinner",
-                                color = "black",
-                                children = [
-                                    dbc.CardBody(id = "display_data")
-                                ]
-                            )
-                        ]
-                    )
-                ]
-            )
-        ),
+        html.Br(),
+        html.Br(),
     ]
 )
 
@@ -106,101 +120,127 @@ tab_data_inpection = dbc.Tab(
     active_tab_class_name = "tab-selected",
     label_class_name = "tab-label-style",
     children = [
-        dbc.Row(
-            class_name = "tab-top-row",
-            children = [
-                dbc.Col(
-                    width = 3,
-                    children = [
-                        dbc.Card(
-                            [
-                                dbc.CardBody(
+        html.Div(
+            [
+                dbc.Row(
+                    class_name="tab-top-row",
+                    children=[
+                        dbc.Col(
+                            width=2,
+                            children=[
+                                dbc.Card(
                                     [
-                                        html.Div(
+                                        dbc.CardBody(
                                             [
                                                 html.Div(
                                                     [
-                                                        html.H5("Select A Variable Type"),
-                                                        dcc.Dropdown(
-                                                            id = "data_variable_type",
-                                                            options = [
-                                                                {"label": "Numeric",  "value": "numeric"},
-                                                                {"label": "Character", "value": "character"},
-                                                                {"label": "Datetime", "value": "datetime"}
-                                                            ],
-                                                            searchable = True,
-                                                        )
-                                                    ]
-                                                ),
-
-                                                html.Br(),
-                                                html.Br(),
-
-                                                html.Div(
-                                                    [
-                                                        dbc.ButtonGroup(
+                                                        html.Div(
                                                             [
-                                                                dbc.Button(
-                                                                    id = "unique_chr_value",
-                                                                    children = "Check Unique Character Values",
-                                                                ),
-
-                                                                html.Br(),
-
-                                                                dbc.Button(
-                                                                    id = "numeric_summary",
-                                                                    children = "Check Numeric summary",
-                                                                ),
-
-                                                                html.Br(),
-
-                                                                dbc.Button(
-                                                                    id = "missing_values",
-                                                                    children = "Check Missing Values",
+                                                                html.Label("Select a variable type", className = "card-text"),
+                                                                dcc.Dropdown(
+                                                                    id="data_variable_type",
+                                                                    options=[
+                                                                        {"label": "Numeric", "value": "numeric"},
+                                                                        {"label": "Character", "value": "character"},
+                                                                        {"label": "Datetime", "value": "datetime"}
+                                                                    ],
+                                                                    searchable=True,
                                                                 )
-                                                            ],
-                                                            vertical = True
+                                                            ]
+                                                        ),
+
+                                                        html.Br(),
+                                                        html.Br(),
+
+                                                        html.Div(
+                                                            [
+                                                                dbc.ButtonGroup(
+                                                                    [
+                                                                        dbc.Button(
+                                                                            id="unique_chr_value",
+                                                                            children="Check Unique Character Values",
+                                                                        ),
+
+                                                                        html.Br(),
+
+                                                                        dbc.Button(
+                                                                            id="numeric_summary",
+                                                                            children="Check Numeric summary",
+                                                                        ),
+
+                                                                        html.Br(),
+
+                                                                        dbc.Button(
+                                                                            id="missing_values",
+                                                                            children="Check Missing Values",
+                                                                        )
+                                                                    ],
+                                                                    vertical=True
+                                                                )
+                                                            ]
                                                         )
                                                     ]
                                                 )
-                                            ]
+                                            ],
+                                            class_name= "card-text"
                                         )
+                                    ],
+                                    color = cf.card_color
+                                )
+                            ],
+                            class_name= "setting-panel-box",
+                        ),
+
+                        dbc.Col(
+                            [
+                                html.Div(
+                                    [
+                                        html.Label("Data Preview", className="label-header"),
+                                        html.Hr(),
+
+                                        dcc.Loading(
+                                            id="data_check_spinner",
+                                            color="black",
+                                            children=[
+                                                dbc.CardBody(id="data_check_output", class_name="card-text")
+                                            ]
+                                        ),
                                     ]
                                 )
-                            ]
-                        )
+                            ],
+
+                            width= 9,
+                            class_name= "panel-box",
+                        ),
                     ]
                 ),
 
-                dbc.Col(
+                html.Br(),
+
+                dbc.Row(
                     [
-                        dbc.Card(
+                        dbc.Col(
                             [
-                                dbc.CardHeader("Data Preview", class_name="card-title"),
-                                dcc.Loading(
-                                    id="data_check_spinner",
-                                    color="black",
-                                    children=[
-                                        dbc.CardBody(id="data_check_output")
+                                html.Div(
+                                    [
+                                        html.Label("Data Structure", className="label-header"),
+                                        html.Hr(),
+
+                                        dcc.Markdown(id="data_inspection_summary", className= "card-text"),
                                     ]
-                                ),
-                            ]
-                        ),
-
-                        html.Br(),
-
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("Data Structure", class_name = "card-title"),
-                                dbc.CardBody(dcc.Markdown(id = "data_inspection_summary"), )
-                            ]
-                        ),
-                    ],
-
-                    width = 9,
+                                )
+                            ],
+                            width = 9,
+                            class_name= "inspect-desc-panel-out-box",
+                        )
+                    ]
                 )
             ]
-        )
+        ),
+
+        html.Br(),
+        html.Br(),
+        html.Br(),
     ]
 )
 
@@ -213,207 +253,224 @@ tab_data_cleaning = dbc.Tab(
     active_tab_class_name = "tab-selected",
     label_class_name = "tab-label-style",
     children = [
-            dbc.Row(
-                class_name = "tab-top-row",
-                children = [
-                    dbc.Col(
-                        width = 3,
-                        children = [
-                            dbc.Card(
-                                dbc.CardBody(
-                                    [
-                                        html.Div(
-                                            [
-                                                html.Div(
-                                                    [
-                                                        html.H5("Drop Missing Values"),
-                                                        dcc.Dropdown(
-                                                            id = "drop_missing_values",
-                                                            options = [
-                                                                {"label": "Rows with missing values.", "value": "all_rows"},
-                                                                {"label": "Columns with missing values.", "value": "all_cols"},
-                                                                {"label": "Rows when all records are missing.", "value": "rows_all_na"},
-                                                                {"label": "Columns with only missing values.", "value": "cols_all_na"},
-                                                                {"label": "Columns based on percentage of missing values.", "value": "percent_missing"}
-                                                            ],
-                                                            searchable = True,
-                                                            placeholder = "How to drop missing values",
-                                                        ),
+        html.Div(
+            [
+                dbc.Row(
+                    class_name="tab-top-row",
+                    children=[
+                        dbc.Col(
+                            width=3,
+                            children=[
+                                dbc.Card(
+                                    dbc.CardBody(
+                                        [
+                                            html.Div(
+                                                [
+                                                    html.Div(
+                                                        [
+                                                            html.H5("Drop Missing Values"),
+                                                            dcc.Dropdown(
+                                                                id="drop_missing_values",
+                                                                options=[
+                                                                    {"label": "Rows with missing values.",
+                                                                     "value": "all_rows"},
+                                                                    {"label": "Columns with missing values.",
+                                                                     "value": "all_cols"},
+                                                                    {"label": "Rows when all records are missing.",
+                                                                     "value": "rows_all_na"},
+                                                                    {"label": "Columns with only missing values.",
+                                                                     "value": "cols_all_na"},
+                                                                    {
+                                                                        "label": "Columns based on percentage of missing values.",
+                                                                        "value": "percent_missing"}
+                                                                ],
+                                                                searchable=True,
+                                                                placeholder="How to drop missing values",
+                                                            ),
 
-                                                        html.Br(),
+                                                            html.Br(),
 
-                                                        html.P("This is necessary when Columns based on percentage of missing values is selected"),
-                                                        dbc.InputGroup(
-                                                            [
-                                                                dbc.Input(placeholder = "Non Missing",
-                                                                          id = "percent_non_missing",
-                                                                          type = "number",
-                                                                          min = 0, max = 100),
-                                                                dbc.InputGroupText("%"),
-                                                            ],
-                                                            className = "styled-numeric-input"
-                                                        ),
-                                                        dbc.Tooltip(
-                                                            children = "Number must be between 1 and 100",
-                                                            target = "percent_non_missing",
-                                                            placement = "right",
-                                                        )
-                                                    ],
-                                                ),
+                                                            html.P(
+                                                                "This is necessary when Columns based on percentage of missing values is selected"),
+                                                            dbc.InputGroup(
+                                                                [
+                                                                    dbc.Input(placeholder="Non Missing",
+                                                                              id="percent_non_missing",
+                                                                              type="number",
+                                                                              min=0, max=100),
+                                                                    dbc.InputGroupText("%"),
+                                                                ],
+                                                                className="styled-numeric-input"
+                                                            ),
+                                                            dbc.Tooltip(
+                                                                children="Number must be between 1 and 100",
+                                                                target="percent_non_missing",
+                                                                placement="right",
+                                                            )
+                                                        ],
+                                                    ),
 
-                                                html.Br(),
-                                                html.Br(),
+                                                    html.Br(),
+                                                    html.Br(),
 
-                                                html.Div(
-                                                    [
-                                                        html.H5("Change Data Type"),
-                                                        dbc.Accordion(
-                                                            children = [
-                                                                dbc.AccordionItem(
-                                                                    [
-                                                                        dcc.Dropdown(
-                                                                            id = "change_character_var",
-                                                                            multi = True,
-                                                                        ),
-                                                                    ],
-                                                                    title = "To Character",
-                                                                ),
+                                                    html.Div(
+                                                        [
+                                                            html.H5("Change Data Type"),
+                                                            dbc.Accordion(
+                                                                children=[
+                                                                    dbc.AccordionItem(
+                                                                        [
+                                                                            dcc.Dropdown(
+                                                                                id="change_character_var",
+                                                                                multi=True,
+                                                                            ),
+                                                                        ],
+                                                                        title="To Character",
+                                                                    ),
 
-                                                                dbc.AccordionItem(
-                                                                    [
-                                                                        html.H6("Integer"),
-                                                                        dcc.Dropdown(
-                                                                            id = "change_integer_var",
-                                                                            multi = True,
-                                                                        ),
+                                                                    dbc.AccordionItem(
+                                                                        [
+                                                                            html.H6("Integer"),
+                                                                            dcc.Dropdown(
+                                                                                id="change_integer_var",
+                                                                                multi=True,
+                                                                            ),
 
-                                                                        html.Br(),
+                                                                            html.Br(),
 
-                                                                        html.H6("Float"),
-                                                                        dcc.Dropdown(
-                                                                            id = "change_float_var",
-                                                                            multi = True,
-                                                                        ),
-                                                                    ],
-                                                                    title = "To Numeric",
-                                                                ),
+                                                                            html.H6("Float"),
+                                                                            dcc.Dropdown(
+                                                                                id="change_float_var",
+                                                                                multi=True,
+                                                                            ),
+                                                                        ],
+                                                                        title="To Numeric",
+                                                                    ),
 
-                                                                dbc.AccordionItem(
-                                                                    [
-                                                                        dcc.Dropdown(
-                                                                            id = "change_boolean_var",
-                                                                            multi = True,
-                                                                        ),
-                                                                    ],
-                                                                    title = "To Boolean",
-                                                                ),
+                                                                    dbc.AccordionItem(
+                                                                        [
+                                                                            dcc.Dropdown(
+                                                                                id="change_boolean_var",
+                                                                                multi=True,
+                                                                            ),
+                                                                        ],
+                                                                        title="To Boolean",
+                                                                    ),
 
-                                                                dbc.AccordionItem(
-                                                                    [
-                                                                        dcc.Dropdown(
-                                                                            id = "change_datetime_var",
-                                                                            multi = True,
-                                                                        ),
-                                                                    ],
-                                                                    title = "To Datetime",
-                                                                ),
-                                                            ],
-                                                            start_collapsed = True,
-                                                        ),
-                                                    ],
-                                                ),
+                                                                    dbc.AccordionItem(
+                                                                        [
+                                                                            dcc.Dropdown(
+                                                                                id="change_datetime_var",
+                                                                                multi=True,
+                                                                            ),
+                                                                        ],
+                                                                        title="To Datetime",
+                                                                    ),
+                                                                ],
+                                                                start_collapsed=True,
+                                                            ),
 
-                                                html.Br(),
-                                                html.Br(),
+                                                            comp_fun.create_modal_ui("drop_empty_value_modal",
+                                                                                     "drop_empty_value",
+                                                                                     "close_drop_empty_value_modal",
+                                                                                     "Empty Values"),
+                                                        ],
+                                                    ),
 
-                                                html.Div(
-                                                    [
-                                                        html.H5("Extract More Datetime variables"),
-                                                        dcc.Dropdown(
-                                                            id = "datetime_variable",
-                                                            placeholder = "Select A Datetime variable",
-                                                        ),
+                                                    html.Br(),
+                                                    html.Br(),
 
-                                                        html.Br(),
+                                                    html.Div(
+                                                        [
+                                                            html.H5("Extract More Datetime variables"),
+                                                            dcc.Dropdown(
+                                                                id="datetime_variable",
+                                                                placeholder="Select A Datetime variable",
+                                                            ),
 
-                                                        html.H6("Type Of Datetime To Extract"),
-                                                        dcc.Dropdown(
-                                                            id = "type_datetime",
-                                                            options = [
-                                                                {"label": "Second", "value": "second"},
-                                                                {"label": "Minute", "value": "minute"},
-                                                                {"label": "Hour", "value": "hour"},
-                                                                {"label": "Day", "value": "day"},
-                                                                {"label": "Month", "value": "month"},
-                                                                {"label": "Month Name", "value": "month_name"},
-                                                                {"label": "Quarter", "value": "quarter"},
-                                                                {"label": "Year", "value": "year"},
-                                                                {"label": "Day of year", "value": "day_of_year"},
-                                                                {"label": "Week of year", "value": "week_of_year"}
-                                                            ],
-                                                            multi = True,
-                                                            placeholder = "Which"
-                                                        )
-                                                    ]
-                                                ),
+                                                            html.Br(),
 
-                                                html.Br(),
-                                                html.Br(),
+                                                            html.H6("Type Of Datetime To Extract"),
+                                                            dcc.Dropdown(
+                                                                id="type_datetime",
+                                                                options=[{"label": cf.clean_plot_label(dt_types),
+                                                                          "value": dt_types}
+                                                                         for dt_types in comp_fun.datetime_type],
+                                                                multi=True,
+                                                                placeholder="Which"
+                                                            )
+                                                        ]
+                                                    ),
 
-                                                html.Div(
-                                                    [
-                                                        dbc.Button(
-                                                        children = "Clean",
-                                                        id = "clean",
-                                                        color = "success",
-                                                        class_name = "me-1"
-                                                        ),
-                                                    ],
-                                                    className = "d-grid gap-2",
-                                                )
-                                            ]
-                                        )
-                                    ]
-                                )
-                            )
-                        ]
-                    ),
+                                                    html.Br(),
+                                                    html.Br(),
 
-                    dbc.Col(
-                        width = 9,
-                        children = [
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader("Data Preview"),
-                                    dcc.Loading(
-                                        id = "data_cleaning_spinner",
-                                        color = "black",
-                                        children = [
-                                            dbc.CardBody(id = "data_cleaning_output"),
-                                        ]
+                                                    html.Div(
+                                                        [
+                                                            dbc.Button(
+                                                                children="Clean",
+                                                                id="clean",
+                                                                color="success",
+                                                                class_name="me-1"
+                                                            ),
+                                                        ],
+                                                        className="d-grid gap-2",
+                                                    )
+                                                ]
+                                            )
+                                        ],
                                     ),
+                                    color=cf.card_color
+                                )
+                            ],
+                            class_name="setting-od-panel-box",
+                        ),
 
-                                    html.Br(),
+                        dbc.Col(
+                            width=9,
+                            children=[
+                                html.Div(
+                                    [
+                                        html.Label("Data Preview", className="label-header"),
+                                        html.Hr(),
+                                        dcc.Loading(
+                                            id="data_cleaning_spinner",
+                                            color="black",
+                                            children=[
+                                                dbc.CardBody(id="data_cleaning_output"),
+                                            ]
+                                        ),
 
-                                    dcc.Markdown(id = "table_summary"),
+                                        html.Br(),
 
-                                    dcc.Store(id = "store_cleaned_data"),
-                                ]
-                            ),
+                                        dcc.Markdown(id="table_summary", className="mk-summary"),
 
-                            html.Br(),
+                                        dcc.Store(id="store_cleaned_data"),
+                                    ],
+                                    className= "div-card"
+                                ),
 
-                            dbc.Card(
-                                [
-                                    dbc.CardHeader("Data types"),
-                                    dbc.CardBody(id = "data_type_output"),
-                                ],
-                            ),
-                        ]
-                    )
-                ]
-            )
-        ]
+                                html.Br(),
+
+                                html.Div(
+                                    [
+                                        html.Label("Data types", className= "label-header"),
+                                        html.Hr(),
+                                        dbc.CardBody(id="data_type_output"),
+                                    ],
+                                    className= "div-card"
+                                )
+                            ],
+                        )
+                    ]
+                ),
+
+                html.Br(),
+                html.Br(),
+                html.Br(),
+            ],
+        ),
+    ]
 )
 
 
@@ -426,196 +483,208 @@ tab_data_summary = dbc.Tab(
     active_tab_class_name = "tab-selected",
     label_class_name = "tab-label-style",
     children = [
-        dbc.Row(
-            class_name = "tab-top-row",
-            children = [
-                dbc.Col(
-                    width = 3,
-                    children = [
-                        dbc.Card(
-                            [
-                                dbc.CardBody(
+        html.Div(
+            [
+                dbc.Row(
+                    children=[
+                        dbc.Col(
+                            children=[
+                                dbc.Card(
                                     [
-                                        html.Div(
+                                        dbc.CardBody(
                                             [
                                                 html.Div(
                                                     [
-                                                        html.H6("Select A Variable"),
-                                                        dcc.Dropdown(
-                                                            id = "first_variable",
-                                                            searchable = True,
-                                                            placeholder = "Nothing Selected",
-                                                        )
-                                                    ]
-                                                ),
-
-                                                html.Br(),
-
-                                                html.Div(
-                                                    [
-                                                        html.H6("Select A Variable (Optional)"),
-                                                        dcc.Dropdown(
-                                                            id = "second_variable",
-                                                            searchable = True,
-                                                            placeholder = "Nothing Selected",
-                                                        )
-                                                    ]
-                                                ),
-
-                                                html.Br(),
-
-                                                html.Div(
-                                                    [
-                                                        html.H6("Select A variable (Optional)"),
-                                                        dcc.Dropdown(
-                                                            id = "third_variable",
-                                                            searchable = True,
-                                                            placeholder = "Nothing Selected",
-                                                        )
-                                                    ]
-                                                ),
-
-                                                dbc.Modal(
-                                                    [
-                                                        dbc.ModalBody(
-                                                            dcc.Markdown(id = "duplicate_input")
-                                                        ),
-                                                        dbc.ModalFooter(
-                                                            dbc.Button(
-                                                                "Okay",
-                                                                id = "close_modal",
-                                                                n_clicks = 0,
-                                                                class_name = "ms-auto"
-                                                            )
-                                                        )
-                                                    ],
-                                                    id = "modal_id",
-                                                    is_open = False,
-                                                ),
-
-                                                html.Br(),
-
-                                                html.Div(
-                                                    [
-                                                        dbc.Accordion(
+                                                        html.Div(
                                                             [
-                                                                dbc.AccordionItem(
-                                                                    [
-                                                                        html.P(
-                                                                         "This is useful when a single numerical or character variable is selected."
-                                                                        ),
-                                                                        dcc.Dropdown(
-                                                                            id = "plot_type",
-                                                                            searchable = True,
-                                                                            placeholder = "Nothing Selected",
-                                                                        ),
-                                                                    ],
-                                                                    title = "Plot Type"
-                                                                ),
-
-                                                                dbc.AccordionItem(
-                                                                    [
-                                                                        html.P("This is useful when a numeric and any other data type variable is selected"),
-                                                                        dcc.Dropdown(
-                                                                            id = "agg_function",
-                                                                            searchable = True,
-                                                                            # value = "mean",
-                                                                            placeholder = "Nothing Selected",
-                                                                        )
-                                                                    ],
-                                                                    title = "Aggregate Function"
-                                                                ),
-
-                                                                dbc.AccordionItem(
-                                                                    [
-                                                                        html.P("This is useful when a numeric variable is selected."),
-                                                                        dcc.Dropdown(
-                                                                            id = "drop_outlier",
-                                                                            searchable = True,
-                                                                            options = [
-                                                                                {"label": "Weak Lower", "value": "weak_lower"},
-                                                                                {"label": "Weak Upper", "value": "weak_upper"},
-                                                                                {"label": "Weak Both", "value": "weak_both"},
-                                                                                {"label": "Strong Lower", "value": "strong_lower"},
-                                                                                {"label": "Strong Upper", "value": "strong_upper"},
-                                                                                {"label": "Strong Both", "value": "strong_both"}
-                                                                            ],
-                                                                            placeholder = "Nothing Selected",
-                                                                        )
-                                                                    ],
-                                                                    title = "Drop Outlier"
+                                                                html.H6("Select A Variable"),
+                                                                dcc.Dropdown(
+                                                                    id="first_variable",
+                                                                    searchable=True,
+                                                                    placeholder="Nothing Selected",
                                                                 )
-                                                            ],
-                                                            start_collapsed = True,
-                                                        )
-                                                    ]
-                                                ),
-
-                                                html.Br(),
-
-                                                html.Div(
-                                                    [
-                                                        html.H6("Type Of Output"),
-                                                        dbc.RadioItems(
-                                                            id = "output_type",
-                                                            options = [
-                                                                {"label": "Graph", "value": "plot"},
-                                                                {"label": "Table", "value": "table"}
-                                                            ],
-                                                            value = "plot",
+                                                            ]
                                                         ),
 
                                                         html.Br(),
 
-                                                        html.H6("Number Of Rows"),
-                                                        dbc.Input(
-                                                            id = "num_rows",
-                                                            type = "number",
-                                                            min = 3, value = 10,
+                                                        html.Div(
+                                                            [
+                                                                html.H6("Select A Variable (Optional)"),
+                                                                dcc.Dropdown(
+                                                                    id="second_variable",
+                                                                    searchable=True,
+                                                                    placeholder="Nothing Selected",
+                                                                )
+                                                            ]
+                                                        ),
+
+                                                        html.Br(),
+
+                                                        html.Div(
+                                                            [
+                                                                html.H6("Select A variable (Optional)"),
+                                                                dcc.Dropdown(
+                                                                    id="third_variable",
+                                                                    searchable=True,
+                                                                    placeholder="Nothing Selected",
+                                                                )
+                                                            ]
+                                                        ),
+
+                                                        comp_fun.create_modal_ui("modal_id",
+                                                                                 "duplicate_input",
+                                                                                 "close_modal",
+                                                                                 "Duplicate variables detected"),
+
+                                                        html.Br(),
+
+                                                        html.Div(
+                                                            [
+                                                                dbc.Accordion(
+                                                                    [
+                                                                        dbc.AccordionItem(
+                                                                            [
+                                                                                html.P(
+                                                                                    "This is useful when a single numerical or character variable is selected."
+                                                                                ),
+                                                                                dcc.Dropdown(
+                                                                                    id="plot_type",
+                                                                                    searchable=True,
+                                                                                    placeholder="Nothing Selected",
+                                                                                ),
+                                                                            ],
+                                                                            title="Plot Type"
+                                                                        ),
+
+                                                                        dbc.AccordionItem(
+                                                                            [
+                                                                                html.P(
+                                                                                    "This is useful when a numeric and any other data type variable is selected"),
+                                                                                dcc.Dropdown(
+                                                                                    id="agg_function",
+                                                                                    searchable=True,
+                                                                                    # value = "mean",
+                                                                                    placeholder="Nothing Selected",
+                                                                                )
+                                                                            ],
+                                                                            title="Aggregate Function"
+                                                                        ),
+
+                                                                        dbc.AccordionItem(
+                                                                            [
+                                                                                html.P(
+                                                                                    "This is useful when a numeric variable is selected."),
+                                                                                dcc.Dropdown(
+                                                                                    id="drop_outlier",
+                                                                                    searchable=True,
+                                                                                    options = [{"label": cf.clean_plot_label(outlier_ops),
+                                                                                                "value": outlier_ops}
+                                                                                               for outlier_ops in comp_fun.outlier_values],
+                                                                                    placeholder="Nothing Selected",
+                                                                                )
+                                                                            ],
+                                                                            title="Drop Outlier"
+                                                                        ),
+
+                                                                        dbc.AccordionItem(
+                                                                            [
+                                                                                html.P("Number of unique character values to plot"),
+                                                                                dbc.Input(
+                                                                                    id="num_unique_obs",
+                                                                                    type="number",
+                                                                                    min=5, value=10,
+                                                                                )
+                                                                            ],
+                                                                            title = "Unique Character Values"
+                                                                        )
+                                                                    ],
+                                                                    start_collapsed=True,
+                                                                )
+                                                            ]
+                                                        ),
+
+                                                        html.Br(),
+
+                                                        html.Div(
+                                                            [
+                                                                html.H6("Type Of Output"),
+                                                                dbc.RadioItems(
+                                                                    id="output_type",
+                                                                    options=[
+                                                                        {"label": "Graph", "value": "plot"},
+                                                                        {"label": "Table", "value": "table"}
+                                                                    ],
+                                                                    value="plot",
+                                                                ),
+
+                                                                html.Br(),
+
+                                                                html.H6("Number Of Rows"),
+                                                                dbc.Input(
+                                                                    id="num_rows",
+                                                                    type="number",
+                                                                    min=3, value=10,
+                                                                )
+                                                            ]
+                                                        ),
+
+                                                        html.Br(),
+                                                        html.Br(),
+
+                                                        html.Div(
+                                                            [
+                                                                dbc.Button(
+                                                                    children="Display",
+                                                                    id="run_summary",
+                                                                    color="success",
+                                                                    class_name="me-1"
+                                                                )
+                                                            ],
+                                                            className="d-grid gap-2",
                                                         )
                                                     ]
-                                                ),
-
-                                                html.Br(),
-                                                html.Br(),
-
-                                                html.Div(
-                                                    [
-                                                        dbc.Button(
-                                                            children = "Display",
-                                                            id = "run_summary",
-                                                            color = "success",
-                                                            class_name = "me-1"
-                                                        )
-                                                    ],
-                                                    className = "d-grid gap-2",
                                                 )
                                             ]
                                         )
-                                    ]
+                                    ],
+                                    color=cf.card_color
                                 )
-                            ]
+                            ],
+                            width= 3,
+                            class_name= "setting-od-panel-box"
+                        ),
+
+                        dbc.Col(
+                            children=[
+                                html.Div(
+                                    [
+                                        dcc.Loading(
+                                            id="summary_spinner",
+                                            color="black",
+                                            children=[
+                                                dbc.CardBody(id="summary_output"),
+                                            ]
+                                        ),
+                                        dcc.Store(id="summary_data"),
+                                    ],
+                                    className= "div-card"
+                                ),
+                            ],
+                            width=9,
                         )
-                    ]
+                    ],
+                    class_name="tab-top-row",
                 ),
 
-                dbc.Col(
-                    width = 9,
-                    children = [
-                        dbc.Card(
-                            [
-                                dcc.Loading(
-                                    id = "summary_spinner",
-                                    color = "black",
-                                    children = [
-                                        dbc.CardBody(id = "summary_output"),
-                                    ]
-                                ),
-                                dcc.Store(id = "summary_data"),
-                            ]
-                        )
-                    ]
-                )
+                html.Div(
+                    id = "add_corr_div",
+                    children = []
+                ),
+
+                html.Br(),
+                html.Br(),
+                html.Br(),
             ]
         )
     ]
@@ -635,25 +704,25 @@ app.layout = html.Div(
             )
         ),
 
-        html.Br(),
-
         dbc.Row(
             children = [
                 html.Div(
-                    dbc.Tabs(
-                        id = "top_tab",
-
-                        children = [
-                            tab_data_choice,
-                            tab_data_inpection,
-                            tab_data_cleaning,
-                            tab_data_summary
-                        ]
-                    )
+                    [
+                        dbc.Tabs(
+                            id = "top_tab",
+                            children = [
+                                tab_data_choice,
+                                tab_data_inpection,
+                                tab_data_cleaning,
+                                tab_data_summary
+                            ]
+                        )
+                    ]
                 ),
             ]
         )
-    ]
+    ],
+    className= "body-background",
 )
 
 
@@ -676,63 +745,11 @@ def parse_contents(contents, filename, date):
     return u_data
 
 
-def create_dataframe(df, page_size = 10, align_text = "left", increase_col_width = None, tbl_height = None):
-    d_tbl = cf.clean_column_names(df)
-
-    if increase_col_width is not None:
-        cell_conditional = [{"if": {"column_id": increase_col_width[0]}, "width": increase_col_width[1]}]
-    else:
-        cell_conditional = []
-
-    table_style = {"overflowX": "auto", "overflowY": "auto"}
-    if tbl_height is not None:
-        table_style["height"] = tbl_height
-
-
-    return html.Div(
-        [
-            dash_table.DataTable(
-                data = d_tbl.to_dict("records"),
-                columns = [
-                    {"name": col, "id": col,
-                     "format": Format(nully = "N/A",
-                                      precision = 2,
-                                      scheme = Scheme.fixed,
-                                      group  = Group.yes,
-                                      groups = 3,
-                                      ), "type": "numeric" if is_numeric_dtype(d_tbl[col]) else None} for col in d_tbl.columns
-                ],
-                #{"specifier": ".2f"},
-                page_size = page_size,
-                style_table = table_style,
-                fixed_rows = {"headers": True},
-                style_cell = {"minWidth": 100, "maxWidth": 700, "width": 100, "textAlign": align_text, 'textOverflow': 'ellipsis'},
-                style_header = {"backgroundColor": "#E8E8E8", "color": "0F0F0F", "fontWeight": "blue", 'borderBottom': '1px solid #595959'},
-                style_data_conditional = [
-                    {"if": {"row_index": "even"}, "backgroundColor": "#FAFAFA", "color": "#000000"},
-                    {"if": {"row_index": "odd"}, "backgroundColor": "#F5F5F5", "color": "#000000"},
-                        ],
-                style_cell_conditional = cell_conditional,
-            )
-        ]
-    )
-
-
-def create_graph(graph_object):
-    return html.Div(
-        [
-            dcc.Graph(figure = graph_object,
-                      config={
-                          "displaylogo": False,
-                          "modeBarButtonsToRemove": ["pan2d", "lasso2d", "zoomIn2d", "zoomOut2d", "zoom2d", "toImage",
-                                                     "select2d", "autoScale2d"]
-                      }
-                      )
-        ]
-    )
 
 
 # Callbacks ============================================================================================================
+
+
 @app.callback(
     Output("store_data", "data"),
     Input("use_demo_data", "n_clicks"),
@@ -768,7 +785,7 @@ def display_data(jsonified_data):
     if jsonified_data is not None:
         c_tbl = pd.read_json(jsonified_data, orient = "split")
 
-        return create_dataframe(df = c_tbl)
+        return comp_fun.create_dataframe(df = c_tbl)
 
 
 
@@ -789,19 +806,19 @@ def check_for(jsonified_data, variable_type, unique_chr, num_summary, missing_va
 
             if recent_id == "data_variable_type" and variable_type is not None:
                 selected_dtype = cf.get_dtype(df = c_tbl, dtype = variable_type, return_names = False)
-                return create_dataframe(selected_dtype)
+                return comp_fun.create_dataframe(selected_dtype)
 
             elif recent_id == "unique_chr_value":
                 unique_chr_tbl = cf.chr_unique_value(df = c_tbl, max_n=10)
-                return create_dataframe(unique_chr_tbl, increase_col_width = ["Number Of Unique Values", 220])
+                return comp_fun.create_dataframe(unique_chr_tbl, increase_col_width = ["Number Of Unique Values", 220])
 
             elif recent_id == "numeric_summary":
                 num_summary_tbl = cf.numeric_description(df = c_tbl)
-                return create_dataframe(num_summary_tbl)
+                return comp_fun.create_dataframe(num_summary_tbl)
 
             elif recent_id == "missing_values":
                 missing_vals_tbl = cf.get_missing_values(df = c_tbl)
-                return create_dataframe(missing_vals_tbl)
+                return comp_fun.create_dataframe(missing_vals_tbl)
 
 
 
@@ -834,6 +851,60 @@ def update_variable_names(jsonified_data):
     else:
         return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
+
+@app.callback(
+    Output("drop_empty_value", "children"),
+    Output("drop_empty_value_modal", "is_open"),
+    Input("store_data", "data"),
+    Input("close_drop_empty_value_modal", "n_clicks"),
+    Input("clean", "n_clicks"),
+    [State("change_character_var", "value"),
+    State("change_integer_var", "value"),
+    State("change_float_var", "value"),
+    State("change_boolean_var", "value"),
+    State("change_datetime_var", "value"),]
+)
+def dropped_empty_value_modal(jsonified_data, close_click, clean_click, change_chr, change_int, change_float, change_bool,
+                            change_date):
+    if jsonified_data is not None:
+        c_tbl = pd.read_json(jsonified_data, orient = "split")
+        d_tbl = c_tbl.copy()
+
+        if clean_click:
+            cond = False if close_click else True
+
+            if change_chr is not None:
+                val = cf.check_for(what = "empty_values", df = d_tbl, variables= change_chr)
+                if val["bool"]:
+                    return comp_fun.have_empty_values_markdown(val), cond
+                else:
+                    return dash.no_update
+            elif change_int is not None:
+                val = cf.check_for(what="empty_values", df=d_tbl, variables = change_int)
+                if val["bool"]:
+                    return comp_fun.have_empty_values_markdown(val), cond
+                return dash.no_update
+            elif change_float is not None:
+                val = cf.check_for(what="empty_values", df=d_tbl, variables=change_float)
+                if val["bool"]:
+                    return comp_fun.have_empty_values_markdown(val), cond
+                return dash.no_update
+            elif change_bool is not None:
+                val = cf.check_for(what="empty_values", df=d_tbl, variables=change_bool)
+                if val["bool"]:
+                    return comp_fun.have_empty_values_markdown(val), cond
+                return dash.no_update
+            elif change_date is not None:
+                val = cf.check_for(what="empty_values", df=d_tbl, variables=change_date)
+                if val["bool"]:
+                    return comp_fun.have_empty_values_markdown(val), cond
+                return dash.no_update
+            else:
+                return dash.no_update
+        else:
+            return dash.no_update
+    else:
+        return dash.no_update
 
 
 @app.callback(
@@ -877,7 +948,6 @@ def clean_data(jsonified_data, click, drop_missing, percent_missing,
         if change_date is not None:
             d_tbl = cf.change_dtype(df = d_tbl, variables = change_date, to_type = "date")
 
-
         if date_var is not None:
             if typ_date is not None:
                 d_tbl = cf.extract_datetime(df = d_tbl, date_col = date_var, which = typ_date)
@@ -885,7 +955,7 @@ def clean_data(jsonified_data, click, drop_missing, percent_missing,
                 d_tbl
 
         if click:
-            return  create_dataframe(d_tbl, page_size = 20, tbl_height = "600px"), d_tbl.to_json(date_format = "iso", orient = "split")
+            return comp_fun.create_dataframe(d_tbl, page_size = 20, tbl_height = "600px"), d_tbl.to_json(date_format = "iso", orient = "split")
         else:
             raise dash.exceptions.PreventUpdate
 
@@ -914,7 +984,7 @@ def create_data_type_table(cleaned_jsonified_data):
         clean_df = pd.read_json(cleaned_jsonified_data, orient = "split")
 
         desc_output = cf.create_data_type_table(clean_df)
-        return create_dataframe(desc_output, page_size = 20, tbl_height = "400px")
+        return comp_fun.create_dataframe(desc_output, page_size = 20, tbl_height = "400px")
 
     else:
         dash.no_update
@@ -990,9 +1060,7 @@ def toggle_duplicate_modal(first_var, second_var, third_var, close_click, is_ope
 )
 def update_duplicate_message(first_var, second_var, third_var):
     def markdown_output(variable_type):
-        return f"""
-                **Duplicate variables detected**  
-                
+        return f"""  
                 All variables supplied must be unique.  
                   
                 | variable | | value |
@@ -1055,11 +1123,16 @@ def update_plot_agg_type(jsonified_summary_data, first_var, second_var, third_va
             for_plot_type = cf.check_dtype(df = s_tbl, variables = supplied_variables, ckeck_for = "plot_type")
             for_agg_value = cf.check_dtype(df = s_tbl, variables = supplied_variables, ckeck_for = "agg_fun")
 
+            unique_len = s_tbl[first_var].nunique()
+
             if for_plot_type == "character":
-                pt_options = [
-                    {"label": "Bar Chart", "value": "bar"},
-                    {"label": "Pie Chart", "value": "pie"}
-                ]
+                if unique_len <= 5:
+                    pt_options = [
+                        {"label": "Bar Chart", "value": "bar"},
+                        {"label": "Pie Chart", "value": "pie"}
+                    ]
+                else:
+                    pt_options = []
             elif for_plot_type == "numeric":
                 pt_options = [
                     {"label": "Histogram", "value": "hist"},
@@ -1082,7 +1155,7 @@ def update_plot_agg_type(jsonified_summary_data, first_var, second_var, third_va
                    {"label": "Minimum", "value": "min"},
                    {"label": "Maximum", "value": "max"}
                 ]
-                af_value = "mean"
+                af_value = "sum"
             else:
                 af_options = []
                 af_value = ""
@@ -1092,6 +1165,7 @@ def update_plot_agg_type(jsonified_summary_data, first_var, second_var, third_va
             return [], [], []
     else:
         return dash.no_update, dash.no_update, dash.no_update
+
 
 
 
@@ -1105,10 +1179,12 @@ def update_plot_agg_type(jsonified_summary_data, first_var, second_var, third_va
     State("plot_type", "value"),
     State("agg_function", "value"),
     State("drop_outlier", "value"),
+    State("num_unique_obs", "value"),
     State("output_type", "value"),
     State("num_rows", "value")
 )
-def create_summary(jsonified_data, clicks, first_var, second_var, third_var, plot_type, agg_fun, drop_outlier, output_type, n_rows):
+def create_summary(jsonified_data, clicks, first_var, second_var, third_var, plot_type, agg_fun, drop_outlier, n_chr_unique_val,
+                   output_type, n_rows):
     if jsonified_data is not None:
         cc_tbl = pd.read_json(jsonified_data, orient = "split")
 
@@ -1123,19 +1199,111 @@ def create_summary(jsonified_data, clicks, first_var, second_var, third_var, plo
                                           plt_type = plot_type,
                                           num_agg_type = agg_fun,
                                           outlier_type = drop_outlier,
+                                          n_char_unique_value = n_chr_unique_val,
                                           output_type  = output_type)
 
             if output_type == "plot":
-                return create_graph(u_output)
+                return comp_fun.create_graph(u_output)
             elif output_type == "table":
-                return create_dataframe(df = u_output, page_size = n_rows)
+                return comp_fun.create_dataframe(df = u_output, page_size = n_rows)
     else:
         return dash.no_update
 
 
 
+@app.callback(
+    Output("add_corr_div", "children"),
+    Input("summary_data", "data"),
+)
+def corr_div_output(jsonified_data):
+    if jsonified_data is not None:
+        cc_tbl = pd.read_json(jsonified_data, orient = "split")
+        cols = cf.get_matrix_var(cc_tbl)
+
+        if cols != [] and len(cols) >= 2:
+            return html.Div(
+                [
+                    html.Br(),
+
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            [
+                                                dbc.RadioButton(
+                                                    id="plot_corr",
+                                                    label="Correlation Plot",
+                                                    value=False,
+                                                ),
+                                                html.Br(),
+
+                                                html.Label("Select variables(Optional)"),
+                                                dcc.Dropdown(
+                                                    id="matrix_vars",
+                                                    searchable=True,
+                                                    options = cols,
+                                                    placeholder="Nothing Selected",
+                                                    multi = True,
+                                                ),
+                                            ]
+                                        ),
+                                        color=cf.card_color
+                                    )
+                                ],
+                                width=3,
+                                class_name="setting-od-panel-box"
+                            ),
+
+                            dbc.Col(
+                                [
+                                    html.Div(
+                                        [
+                                            dcc.Loading(
+                                                id="other_spinner",
+                                                color="black",
+                                                children=[
+                                                    dbc.CardBody(id="other_output"),
+                                                ]
+                                            ),
+                                        ],
+                                        className="div-card"
+                                    )
+                                ],
+                                width=9
+                            )
+                        ]
+                    ),
+                ]
+            )
+        else:
+            return dash.no_update
+    else:
+        return dash.no_update
+
+
+
+@app.callback(
+    Output("other_output", "children"),
+    Input("summary_data", "data"),
+    Input("plot_corr", "value"),
+    Input("matrix_vars", "value")
+)
+def create_correlation(jsonified_data, b_value, variables):
+    if jsonified_data is not None:
+        cc_tbl = pd.read_json(jsonified_data, orient="split")
+
+        if b_value:
+            corr_plt = cf.corr_matrix(df=cc_tbl, variables=variables)
+
+            return comp_fun.create_graph(corr_plt)
+        else:
+            return dash.no_update
+    else:
+        return dash.no_update
 
 
 
 if __name__ == "__main__":
-    app.run_server(debug = True)
+    app.run_server()
